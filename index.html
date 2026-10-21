@@ -350,6 +350,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--purple);outline:none}
 .check input{width:18px;height:18px;min-height:0;margin-top:3px;flex:0 0 18px;accent-color:var(--primary-btn)}
 form .btn{grid-column:1/-1}
 .form-msg{grid-column:1/-1;font-size:.9rem;color:#86EFAC;margin:0}
+@keyframes spin{to{transform:rotate(360deg)}}
 .contact-list{list-style:none;padding:0;margin:24px 0 0;display:grid;gap:12px}
 .contact-list li{display:flex;gap:12px;align-items:center;color:var(--soft);min-width:0;overflow-wrap:anywhere}
 .contact-list a{text-decoration:none}
@@ -772,7 +773,11 @@ footer{border-top:1px solid var(--line);padding:44px 0 100px;font-size:.88rem;co
         <li><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><span data-address></span></li>
       </ul>
     </div>
-    <form id="applyForm" novalidate>
+    <form id="applyForm" action="https://formsubmit.co/info@maxbraintech.com" method="POST" novalidate>
+      <input type="hidden" name="_subject" id="fsSubject" value="New AI/ML Engineer Course Application - MaxBrain">
+      <input type="hidden" name="_template" value="table">
+      <input type="hidden" name="_captcha" value="false">
+      <input type="hidden" name="_replyto" id="fsReplyTo" value="">
       <div class="field"><label for="name">Full name</label><input id="name" name="Name" autocomplete="name" required></div>
       <div class="field"><label for="phone">Mobile number</label><input id="phone" name="Mobile" type="tel" autocomplete="tel" inputmode="tel" pattern="[0-9+\s\-]{10,15}" required></div>
       <div class="field"><label for="email">Email</label><input id="email" name="Email" type="email" autocomplete="email" required></div>
@@ -892,18 +897,117 @@ footer{border-top:1px solid var(--line);padding:44px 0 100px;font-size:.88rem;co
     mode.value = /jaipur/i.test(e.target.value) ? 'Jaipur classroom – Morning' : 'Live online – Morning';
   });
 
-  // Application form: validates, then opens a pre-filled email to admissions.
-  // To save leads to a CRM / Google Sheet instead, replace the mailto block with a fetch() POST to your endpoint.
-  document.getElementById('applyForm').addEventListener('submit', e => {
+  // Application form submission to info@maxbraintech.com
+  const applyForm = document.getElementById('applyForm');
+  const formMsg = document.getElementById('formMsg');
+  const submitBtn = applyForm.querySelector('button[type="submit"]');
+
+  applyForm.addEventListener('submit', async function(e) {
     e.preventDefault();
-    const f = e.target, msg = document.getElementById('formMsg');
-    if (!f.checkValidity()) { f.reportValidity(); return; }
-    const d = Object.fromEntries(new FormData(f));
-    const body = Object.entries(d).map(([k, v]) => k + ': ' + v).join('\n');
-    window.location.href = 'mailto:' + S.email + '?subject=' +
-      encodeURIComponent('Application – AI/ML Engineer Program (26 Oct 2026) – ' + d.Name) +
-      '&body=' + encodeURIComponent(body);
-    msg.textContent = 'Thank you! Your email app will open to send the application. Our team will call you within 24 hours.';
+    if (!this.checkValidity()) {
+      this.reportValidity();
+      return;
+    }
+
+    const formData = new FormData(this);
+    const d = Object.fromEntries(formData.entries());
+
+    // Update hidden config fields
+    const replyEl = document.getElementById('fsReplyTo');
+    const subjEl = document.getElementById('fsSubject');
+    if (replyEl) replyEl.value = d.Email || '';
+    if (subjEl) subjEl.value = `New Admission Application: ${d.Name} (${d.Mode || 'General'})`;
+
+    // Loading button state
+    const originalBtnText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <svg style="width:18px;height:18px;animation:spin 1s linear infinite;margin-right:8px;vertical-align:middle;display:inline-block;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25"></circle>
+        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor"></path>
+      </svg> Submitting Application...
+    `;
+    formMsg.className = 'form-msg';
+    formMsg.style.display = 'block';
+    formMsg.innerHTML = '<span style="color:var(--amber);">Sending your details to admissions (info@maxbraintech.com)...</span>';
+
+    // If running directly as a local file (file://), standard form POST works across security policies
+    if (window.location.protocol === 'file:') {
+      this.submit();
+      return;
+    }
+
+    try {
+      const payload = {
+        "Applicant Name": d.Name,
+        "Mobile Number": d.Mobile,
+        "Email Address": d.Email,
+        "City & State": d.City,
+        "Qualification": d.Qualification,
+        "Current Status": d.Status,
+        "College or Company": d["College or company"] || "Not provided",
+        "Preferred Mode": d.Mode,
+        "Interested In": d.Interest,
+        "Submitted At": new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+        "_subject": `New Application: ${d.Name} - AI/ML Engineer Batch`,
+        "_replyto": d.Email,
+        "_template": "table",
+        "_captcha": "false"
+      };
+
+      const res = await fetch("https://formsubmit.co/ajax/" + encodeURIComponent(S.email), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const resData = await res.json();
+
+      if (res.ok && (resData.success === "true" || resData.success === true)) {
+        formMsg.innerHTML = `
+          <div style="background:rgba(52,211,153,0.12);border:1px solid var(--green);padding:14px 18px;border-radius:12px;margin-top:10px;">
+            <b style="color:var(--green);font-size:1rem;display:flex;align-items:center;gap:6px;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Application Submitted Successfully!
+            </b>
+            <p style="margin:6px 0 0;color:var(--soft);font-size:0.92rem;">
+              Thank you, <b>${esc(d.Name)}</b>! Your application has been sent directly to <b>${esc(S.email)}</b>. Our admissions team will contact you within 24 hours.
+            </p>
+          </div>
+        `;
+        applyForm.reset();
+      } else if (resData.message && resData.message.includes("Activation")) {
+        formMsg.innerHTML = `
+          <div style="background:rgba(239,164,47,0.12);border:1px solid var(--amber);padding:14px 18px;border-radius:12px;margin-top:10px;">
+            <b style="color:var(--amber);font-size:1rem;display:block;margin-bottom:4px;">Action Required: Activate Form</b>
+            <p style="margin:0;color:var(--soft);font-size:0.9rem;">
+              FormSubmit has sent a 1-time activation link to <b>${esc(S.email)}</b>. Please check your inbox and click "Activate Form" once to enable instant inbox delivery for all applications.
+            </p>
+          </div>
+        `;
+        applyForm.reset();
+      } else {
+        throw new Error(resData.message || "Failed to submit form");
+      }
+    } catch (err) {
+      console.error("Submission error:", err);
+      formMsg.innerHTML = `
+        <div style="background:rgba(248,113,113,0.12);border:1px solid #F87171;padding:14px 18px;border-radius:12px;margin-top:10px;">
+          <b style="color:#F87171;display:block;margin-bottom:4px;">Could not connect to submission server.</b>
+          <p style="margin:0 0 10px;color:var(--soft);font-size:0.88rem;">Please send your application directly via WhatsApp or Email:</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <a href="https://wa.me/${S.whatsapp}?text=${encodeURIComponent('Hi MaxBrain, I want to apply for AI/ML Program.\nName: ' + d.Name + '\nPhone: ' + d.Mobile + '\nEmail: ' + d.Email)}" target="_blank" class="btn btn-sm btn-primary" style="text-decoration:none;">Send via WhatsApp</a>
+            <a href="mailto:${S.email}?subject=${encodeURIComponent('Application: ' + d.Name)}&body=${encodeURIComponent(Object.entries(d).map(([k,v]) => k + ': ' + v).join('\n'))}" class="btn btn-sm btn-ghost" style="text-decoration:none;">Open in Email App</a>
+          </div>
+        </div>
+      `;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnText;
+    }
   });
 })();
 </script>
